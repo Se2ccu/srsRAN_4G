@@ -188,6 +188,9 @@ private:
   rrc_args_t args = {};
 
   uint32_t cell_clean_cnt = 0;
+  uint32_t msg3_loop_count = 0;
+
+  srsran::timer_handler::unique_timer msg3_loop_timer;
 
   srsran::phy_cfg_t previous_phy_cfg = {};
   srsran::mac_cfg_t current_mac_cfg, previous_mac_cfg = {};
@@ -345,6 +348,10 @@ private:
   void radio_link_failure_push_cmd();
   void radio_link_failure_process();
   void leave_connected();
+  void hot_reset_for_msg3_loop();
+  void run_msg3_loop_attempt();
+  void schedule_msg3_loop_attempt();
+  void handle_msg3_loop_ra_complete();
   void stop_timers();
   void start_con_restablishment(asn1::rrc::reest_cause_e cause);
 

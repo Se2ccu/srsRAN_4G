@@ -41,6 +41,9 @@ struct rrc_args_t {
   bool                                    support_ca;
   int                                     mbms_service_id;
   uint32_t                                mbms_service_port;
+  bool                                    msg3_loop_enable;
+  uint32_t                                msg3_loop_target;
+  uint32_t                                msg3_loop_delay_ms;
 };
 
 #define SRSRAN_UE_CATEGORY_DEFAULT "4"

@@ -148,6 +148,7 @@ void rrc::init(phy_interface_rrc_lte* phy_,
   t310 = task_sched.get_unique_timer();
   t311 = task_sched.get_unique_timer();
   t304 = task_sched.get_unique_timer();
+  msg3_loop_timer = task_sched.get_unique_timer();
 
   var_rlf_report.init(task_sched);
 
@@ -171,12 +172,18 @@ void rrc::init(phy_interface_rrc_lte* phy_,
   ue_required_sibs.assign(&required_sibs[0], &required_sibs[NOF_REQUIRED_SIBS]);
   running   = true;
   initiated = true;
+
+  if (args.msg3_loop_enable) {
+    logger.info("Msg3 loop mode enabled. target=%u, delay=%u ms", args.msg3_loop_target, args.msg3_loop_delay_ms);
+    schedule_msg3_loop_attempt();
+  }
 }
 
 void rrc::stop()
 {
   running = false;
   stop_timers();
+  msg3_loop_timer.stop();
   cmd_msg_t msg;
   msg.command = cmd_msg_t::STOP;
   cmd_q.push(std::move(msg));
@@ -257,6 +264,9 @@ void rrc::run_tti()
         case cmd_msg_t::RA_COMPLETE:
           if (ho_handler.is_busy()) {
             ho_handler.trigger(ho_proc::ra_completed_ev{msg.lcid > 0});
+          }
+          if (args.msg3_loop_enable and not ho_handler.is_busy()) {
+            handle_msg3_loop_ra_complete();
           }
           break;
         case cmd_msg_t::STOP:
@@ -714,6 +724,13 @@ void rrc::release_pucch_srs()
 
 void rrc::ra_problem()
 {
+  if (args.msg3_loop_enable) {
+    logger.warning("MAC indicated RA problem during Msg3 loop. Scheduling next attempt.");
+    hot_reset_for_msg3_loop();
+    schedule_msg3_loop_attempt();
+    return;
+  }
+
   if (not t300.is_running() and not t301.is_running() and not t304.is_running() and not t311.is_running()) {
     logger.warning("MAC indicated RA problem. Starting RLF");
     radio_link_failure_push_cmd();
@@ -1124,6 +1141,89 @@ void rrc::start_go_idle()
     return;
   }
   callback_list.add_proc(idle_setter);
+}
+
+void rrc::hot_reset_for_msg3_loop()
+{
+  stop_timers();
+  security_is_activated = false;
+  state                 = RRC_STATE_IDLE;
+
+  mac->reset();
+  set_mac_default();
+  rlc->reset();
+  pdcp->reset();
+  stack->reset_eps_bearers();
+
+  if (phy->cell_is_camping()) {
+    mac->pcch_start_rx();
+  }
+}
+
+void rrc::run_msg3_loop_attempt()
+{
+  if (not args.msg3_loop_enable or not initiated or not running) {
+    return;
+  }
+
+  if (args.msg3_loop_target > 0 and msg3_loop_count >= args.msg3_loop_target) {
+    return;
+  }
+
+  if (not plmn_is_selected or not phy->cell_is_camping()) {
+    schedule_msg3_loop_attempt();
+    return;
+  }
+
+  hot_reset_for_msg3_loop();
+  send_con_request(srsran::establishment_cause_t::mo_sig);
+
+  if (args.msg3_loop_target > 0) {
+    logger.info("Msg3 loop started access cycle %u/%u", msg3_loop_count + 1, args.msg3_loop_target);
+  } else {
+    logger.info("Msg3 loop started access cycle %u", msg3_loop_count + 1);
+  }
+}
+
+void rrc::schedule_msg3_loop_attempt()
+{
+  if (not args.msg3_loop_enable or not initiated or not running) {
+    return;
+  }
+
+  if (args.msg3_loop_target > 0 and msg3_loop_count >= args.msg3_loop_target) {
+    return;
+  }
+
+  if (msg3_loop_timer.is_running()) {
+    msg3_loop_timer.stop();
+  }
+
+  uint32_t delay_ms = args.msg3_loop_delay_ms == 0 ? 1 : args.msg3_loop_delay_ms;
+  msg3_loop_timer.set(delay_ms, [this](uint32_t) { run_msg3_loop_attempt(); });
+  msg3_loop_timer.run();
+}
+
+void rrc::handle_msg3_loop_ra_complete()
+{
+  msg3_loop_count++;
+
+  if (args.msg3_loop_target > 0) {
+    logger.info("Msg3 loop progress %u/%u", msg3_loop_count, args.msg3_loop_target);
+  } else {
+    logger.info("Msg3 loop progress %u", msg3_loop_count);
+  }
+
+  srsran::console("Msg3 loop progress: %u\n", msg3_loop_count);
+
+  if (args.msg3_loop_target > 0 and msg3_loop_count >= args.msg3_loop_target) {
+    logger.info("Msg3 loop reached target=%u", args.msg3_loop_target);
+    msg3_loop_timer.stop();
+    return;
+  }
+
+  hot_reset_for_msg3_loop();
+  schedule_msg3_loop_attempt();
 }
 
 // HO failure from T304 expiry 5.3.5.6
