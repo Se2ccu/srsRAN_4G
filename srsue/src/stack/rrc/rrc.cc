@@ -1222,7 +1222,8 @@ void rrc::handle_msg3_loop_ra_complete()
     return;
   }
 
-  hot_reset_for_msg3_loop();
+  // Reset at the beginning of next cycle to avoid tearing down immediately
+  // after random-access completion.
   schedule_msg3_loop_attempt();
 }
 
@@ -1900,6 +1901,10 @@ void rrc::parse_dl_ccch(unique_byte_buffer_t pdu)
       }
     } break;
     case dl_ccch_msg_type_c::c1_c_::types::rrc_conn_setup: {
+      if (args.msg3_loop_enable) {
+        logger.debug("Msg3 loop mode: dropping RRCConnectionSetup (Msg4) and skipping Msg5");
+        break;
+      }
       transaction_id                   = c1->rrc_conn_setup().rrc_transaction_id;
       rrc_conn_setup_s conn_setup_copy = c1->rrc_conn_setup();
       task_sched.defer_task([this, conn_setup_copy]() { handle_con_setup(conn_setup_copy); });

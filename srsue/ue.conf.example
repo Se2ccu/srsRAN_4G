@@ -159,6 +159,9 @@ imei = 353490069873319
 # msg3_loop_enable:     Enable Msg1/Msg2/Msg3 loop mode with in-process hot reset
 # msg3_loop_target:     Target number of successful Msg3 cycles (default: 1000)
 # msg3_loop_delay_ms:   Delay between loop cycles in ms (default: 5)
+#                       Note: Msg3-only loop intentionally skips Msg5. eNB UE-context
+#                       release then depends on SIB2 t300 (on eNB side). If release is
+#                       too slow (e.g. 20s), reduce srsenb sib.conf `t300` (e.g. 200ms).
 # nr_measurement_pci:   NR PCI for the simulated NR measurement. Default: 500
 # nr_short_sn_support:  Announce PDCP short SN support. Default: true
 #####################################################################

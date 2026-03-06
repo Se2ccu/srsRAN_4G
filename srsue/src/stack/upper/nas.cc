@@ -317,7 +317,7 @@ int nas::init(usim_interface_nas* usim_, rrc_interface_nas* rrc_, gw_interface_n
   bzero(&servaddr , sizeof(servaddr));
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  servaddr.sin_addr.s_addr = inet_addr("192.168.137.110");;
+  servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");;
   servaddr.sin_port = htons(PORT);
 
   /*(3) 绑定套接字和端口*/
